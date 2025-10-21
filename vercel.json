@@ -11,10 +11,5 @@
             "src": "/(.*)",
             "dest": "api/webhook.py"
         }
-    ],
-    "env": {
-        "TELEGRAM_TOKEN": "@telegram_token",
-        "GEMINI_API_KEY": "@gemini_api_key",
-        "GOOGLE_SERVICE_ACCOUNT_JSON": "@google_service_account_json"
-    }
+    ]
 }
