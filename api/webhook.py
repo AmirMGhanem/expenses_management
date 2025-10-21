@@ -10,51 +10,59 @@ import json
 import os
 from dotenv import load_dotenv
 
-# Load environment variables from .env file
+# Load environment variables from .env file (local only)
 load_dotenv()
-
-# Get environment variables
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-
-if not TELEGRAM_TOKEN:
-    raise ValueError("TELEGRAM_TOKEN not found in environment variables")
-if not GEMINI_API_KEY:
-    raise ValueError("GEMINI_API_KEY not found in environment variables")
 
 app = FastAPI()
 
-# Initialize Gemini client
-genai.configure(api_key=GEMINI_API_KEY)
-gemini_model = genai.GenerativeModel('models/gemini-2.5-flash')
+# Get environment variables (lazy loaded)
+def get_env(key: str, required: bool = True):
+    """Get environment variable with error handling"""
+    value = os.getenv(key)
+    if required and not value:
+        raise ValueError(f"{key} not found in environment variables")
+    return value
 
-# Google Sheets setup (lazy loading)
+# Google Sheets setup
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive"
 ]
 
-# Load service account credentials (supports both local file and env variable)
-def get_google_credentials():
-    """Get Google credentials from file or environment variable"""
-    service_account_json = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
-    
-    if service_account_json:
-        # Production: Load from environment variable
-        import json
-        service_account_info = json.loads(service_account_json)
-        return Credentials.from_service_account_info(service_account_info, scopes=SCOPES)
-    else:
-        # Local: Load from file
-        return Credentials.from_service_account_file("service_account.json", scopes=SCOPES)
-
-creds = get_google_credentials()
-client = gspread.authorize(creds)
-
-# Lazy load sheet - will connect when first webhook is received
+# Global variables (initialized on first request)
+gemini_model = None
+client = None
 sheet = None
+bot = None
 
-bot = Bot(token=TELEGRAM_TOKEN)
+def initialize_services():
+    """Initialize all services (called on first request)"""
+    global gemini_model, client, bot
+    
+    if gemini_model is None:
+        # Initialize Gemini
+        GEMINI_API_KEY = get_env("GEMINI_API_KEY")
+        genai.configure(api_key=GEMINI_API_KEY)
+        gemini_model = genai.GenerativeModel('models/gemini-2.5-flash')
+    
+    if client is None:
+        # Initialize Google Sheets
+        service_account_json = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
+        
+        if service_account_json:
+            # Production: Load from environment variable
+            service_account_info = json.loads(service_account_json)
+            creds = Credentials.from_service_account_info(service_account_info, scopes=SCOPES)
+        else:
+            # Local: Load from file
+            creds = Credentials.from_service_account_file("service_account.json", scopes=SCOPES)
+        
+        client = gspread.authorize(creds)
+    
+    if bot is None:
+        # Initialize Telegram bot
+        TELEGRAM_TOKEN = get_env("TELEGRAM_TOKEN")
+        bot = Bot(token=TELEGRAM_TOKEN)
 
 # Predefined expense categories
 EXPENSE_CATEGORIES = [
@@ -81,7 +89,9 @@ PAYMENT_METHODS = ["Cash", "Credit Card", "Debit Card", "Bank Transfer", "Digita
 
 def get_sheet():
     """Lazy load the Google Sheet"""
-    global sheet
+    global sheet, client
+    initialize_services()  # Ensure services are initialized
+    
     if sheet is None:
         # Open by spreadsheet ID
         spreadsheet = client.open_by_key("1l0RayNrG0ogeIq3_1iOMxyMx-1ArjXu6mip6GRXG1Q4")
@@ -90,6 +100,9 @@ def get_sheet():
 
 def parse_expense(text: str) -> dict:
     """Parse expense message using Gemini AI"""
+    global gemini_model
+    initialize_services()  # Ensure services are initialized
+    
     categories_list = ", ".join(EXPENSE_CATEGORIES)
     payment_methods_list = ", ".join(PAYMENT_METHODS)
     
@@ -169,7 +182,7 @@ class TestExpense(BaseModel):
 @app.get("/")
 async def root():
     """Root endpoint"""
-    return {"status": "Bot is running!", "version": "1.0"}
+    return {"status": "Bot is running!", "version": "2.0"}
 
 @app.get("/categories")
 async def get_categories():
@@ -207,6 +220,9 @@ async def test_expense(expense: TestExpense):
 @app.post("/")
 async def webhook(request: Request):
     """Telegram webhook endpoint"""
+    global bot
+    initialize_services()  # Ensure services are initialized
+    
     data = await request.json()
     update = Update.de_json(data, bot)
     text = update.message.text
