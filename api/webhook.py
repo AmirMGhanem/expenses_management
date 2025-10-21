@@ -33,7 +33,22 @@ SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive"
 ]
-creds = Credentials.from_service_account_file("service_account.json", scopes=SCOPES)
+
+# Load service account credentials (supports both local file and env variable)
+def get_google_credentials():
+    """Get Google credentials from file or environment variable"""
+    service_account_json = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
+    
+    if service_account_json:
+        # Production: Load from environment variable
+        import json
+        service_account_info = json.loads(service_account_json)
+        return Credentials.from_service_account_info(service_account_info, scopes=SCOPES)
+    else:
+        # Local: Load from file
+        return Credentials.from_service_account_file("service_account.json", scopes=SCOPES)
+
+creds = get_google_credentials()
 client = gspread.authorize(creds)
 
 # Lazy load sheet - will connect when first webhook is received

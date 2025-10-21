@@ -1,0 +1,10 @@
+venv/
+__pycache__/
+*.pyc
+.env
+.DS_Store
+ag-expenses-management-*.json
+service_account.json
+*.md
+HEADERS.txt
+

@@ -1,6 +1,0 @@
-Copy and paste these headers into Row 1 of your Google Sheet:
-
-Date	Description	Amount	Currency	Category	Payment Method	User	Notes
-
-(Tab-separated - just copy and paste into Row 1, starting from cell A1)
-

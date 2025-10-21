@@ -13,6 +13,7 @@ ENV/
 
 # Google Service Account
 service_account.json
+service_account_minified.txt
 ag-expenses-management-*.json
 
 # IDE
